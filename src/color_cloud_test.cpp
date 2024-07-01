@@ -82,7 +82,7 @@ private:
         // Voxel grid filter for downsampling
         pcl::VoxelGrid<PointT> vg;
         vg.setInputCloud(input_cloud);
-        vg.setLeafSize(0.1f, 0.1f, 0.1f);
+        vg.setLeafSize(0.01f, 0.01f, 0.01f);
         vg.filter(*output_cloud);
 
         // Statistical outlier removal for noise reduction
