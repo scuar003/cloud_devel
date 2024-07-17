@@ -108,7 +108,7 @@ private:
 
         extract.setInputCloud(output_cloud);
         extract.setIndices(inliers);
-        extract.setNegative(true); // remove the plane
+        extract.setNegative(false); // remove the plane
         extract.filter(*output_cloud);
     }
 

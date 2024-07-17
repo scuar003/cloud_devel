@@ -97,5 +97,6 @@
         "__tree": "cpp",
         "filesystem": "cpp",
         "ios": "cpp"
-    }
+    },
+    "ros.distro": "humble"
 }
