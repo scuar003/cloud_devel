@@ -32,14 +32,11 @@ add_executable(map src/maps_devel/map.cpp)
 add_executable(map2 src/maps_devel/map2.cpp)
 add_executable(map3 src/maps_devel/map3.cpp)
 add_executable(map4 src/maps_devel/map4.cpp)
-add_executable(cloud_test src/cloud_test.cpp)
 
 # Add filters executables
 add_executable(downsample src/filters/downsample.cpp)
 
 # Add mesh executables
-add_executable(toMesh src/toMesh/mapToMesh.cpp)
-add_executable(toRviz src/toMesh/toRviz.cpp)
 add_executable(SaveCloud src/toMesh/cloudSaver.cpp)
 add_executable(CombineCloud src/toMesh/cloudCombine.cpp)
 add_executable(MeshCloud src/toMesh/cloudMesh.cpp)
@@ -62,9 +59,9 @@ target_link_libraries(map4 ${PCL_LIBRARIES} Eigen3::Eigen)
 ament_target_dependencies(downsample rclcpp sensor_msgs pcl_conversions tf2 tf2_ros tf2_geometry_msgs cv_bridge OpenCV)
 target_link_libraries(downsample ${PCL_LIBRARIES} Eigen3::Eigen)
 
+
+
 # Link libraries for mesh executables
-ament_target_dependencies(toMesh rclcpp sensor_msgs pcl_conversions tf2 tf2_ros tf2_geometry_msgs cv_bridge OpenCV)
-target_link_libraries(toMesh ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::Eigen)
 
 ament_target_dependencies(SaveCloud rclcpp sensor_msgs pcl_conversions tf2 tf2_ros tf2_geometry_msgs cv_bridge OpenCV)
 target_link_libraries(SaveCloud ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::Eigen)
@@ -75,15 +72,6 @@ target_link_libraries(CombineCloud ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::
 ament_target_dependencies(MeshCloud rclcpp sensor_msgs visualization_msgs pcl_conversions tf2 tf2_ros tf2_geometry_msgs cv_bridge OpenCV)
 target_link_libraries(MeshCloud ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::Eigen)
 
-ament_target_dependencies(toRviz rclcpp sensor_msgs visualization_msgs pcl_conversions tf2 tf2_ros tf2_geometry_msgs cv_bridge OpenCV)
-target_link_libraries(toRviz ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::Eigen)
-target_link_libraries(toRviz pcl_surface pcl_features pcl_search)
-
-# Link libraries for cloud_test executable
-ament_target_dependencies(cloud_test rclcpp sensor_msgs visualization_msgs pcl_conversions tf2 tf2_ros tf2_geometry_msgs cv_bridge OpenCV)
-target_link_libraries(cloud_test ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::Eigen)
-
-
 
 # Install targets
 install(TARGETS
@@ -92,12 +80,9 @@ install(TARGETS
   map3
   map4
   downsample
-  toMesh
-  toRviz
   SaveCloud
   CombineCloud
   MeshCloud 
-  cloud_test
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()
