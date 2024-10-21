@@ -25,7 +25,7 @@ class PCLConverter : public rclcpp::Node
 public:
     PCLConverter() : Node("pcl_converter_node"), tf_buffer(this->get_clock()), tf_listener(tf_buffer)
     {
-        sub_pointcloud = create_subscription<PointCloud2>("/camera/depth/color/points", 10, std::bind(&PCLConverter::cloudProcessing, this, _1));
+        sub_pointcloud = create_subscription<PointCloud2>("/camera/camera/depth/color/points", 10, std::bind(&PCLConverter::cloudProcessing, this, _1));
         pub_process_cloud = create_publisher<PointCloud2>("processed_points", 10);
         accumulated_cloud.reset(new PCLcloud);
     }

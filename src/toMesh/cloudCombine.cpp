@@ -3,17 +3,15 @@
 #include <pcl/point_types.h>
 #include <pcl/filters/voxel_grid.h>
 #include <pcl/filters/statistical_outlier_removal.h>
-#include <pcl/segmentation/sac_segmentation.h>
-#include <pcl/filters/extract_indices.h>
-#include <pcl/octree/octree_pointcloud_pointvector.h>
-#include <pcl/features/normal_3d.h>
-#include <pcl/io/ply_io.h>
+#include <pcl/surface/mls.h>
+#include <pcl/filters/radius_outlier_removal.h>
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <memory>
 
 using PointT = pcl::PointXYZRGB;
-using PCLcloud = pcl::PointCloud<PointT>;
+using PCLCloud = pcl::PointCloud<PointT>;
 
 class PointCloudCombiner : public rclcpp::Node
 {
@@ -26,130 +24,120 @@ public:
 private:
     void combinePointClouds()
     {
-        PCLcloud::Ptr combined_cloud(new PCLcloud);
-        int i = 0;
+        PCLCloud::Ptr combined_cloud(new PCLCloud);
         std::vector<std::string> filenames;
+        int batch_size = 100;  // Process in batches of 100 files
 
-        // Load multiple point clouds from files and combine them
-        while (true)
+        for (int i = 0; i < 1360; i += batch_size)
         {
-            PCLcloud::Ptr cloud(new PCLcloud);
-            std::string filename = "cloud_" + std::to_string(i) + ".pcd";
+            PCLCloud::Ptr batch_cloud(new PCLCloud);
 
-            // Try to load the point cloud file
-            if (pcl::io::loadPCDFile<PointT>(filename, *cloud) == -1)
+            for (int j = 0; j < batch_size; ++j)
             {
-                // If the file doesn't exist, break the loop
-                RCLCPP_WARN(this->get_logger(), "No more files to load, stopping at %s", filename.c_str());
-                break;
+                int index = i + j;
+                std::string filename = "cloud_" + std::to_string(index) + ".pcd";
+
+                PCLCloud::Ptr cloud(new PCLCloud);
+                if (pcl::io::loadPCDFile<PointT>(filename, *cloud) == -1)
+                {
+                    RCLCPP_WARN(this->get_logger(), "No more files to load, stopping at %s", filename.c_str());
+                    break;
+                }
+
+                if (!cloud->empty())
+                {
+                    *batch_cloud += *cloud;
+                    filenames.push_back(filename);
+                    RCLCPP_INFO(this->get_logger(), "Successfully combined %s", filename.c_str());
+                }
             }
 
-            // Check if the cloud is not empty before adding
-            if (!cloud->empty())
-            {
-                *combined_cloud += *cloud;     // Combine the point clouds
-                filenames.push_back(filename); // Store the filename for later deletion
-                RCLCPP_INFO(this->get_logger(), "Successfully combined %s", filename.c_str());
-            }
+            // Apply filtering and downsampling on the batch
+            PCLCloud::Ptr filtered_cloud = applyStatisticalOutlierRemoval(batch_cloud);
+            PCLCloud::Ptr voxel_filtered_cloud = applyVoxelGridFilter(filtered_cloud);
 
-            // Move to the next file
-            i++;
+            // Combine with the main point cloud
+            *combined_cloud += *voxel_filtered_cloud;
+
+            RCLCPP_INFO(this->get_logger(), "Processed batch %d to %d", i, i + batch_size - 1);
         }
 
-        // Apply filters and processing on the combined point cloud
+        // Apply final smoothing and outlier removal
+        PCLCloud::Ptr smoothed_cloud = applyMovingLeastSquares(combined_cloud);
+        PCLCloud::Ptr cleaned_cloud = applyRadiusOutlierRemoval(smoothed_cloud);
+        savePointCloud(cleaned_cloud, "combined_cloud.pcd");
+        deletePointCloudFiles(filenames);
+    }
 
-        // 1. Statistical Outlier Removal
+    PCLCloud::Ptr applyStatisticalOutlierRemoval(const PCLCloud::Ptr& input_cloud)
+    {
         pcl::StatisticalOutlierRemoval<PointT> sor;
-        sor.setInputCloud(combined_cloud);
-        sor.setMeanK(50);            // 50 nearest neighbors for calculating mean distance
-        sor.setStddevMulThresh(1.0); // Points further than 1 standard deviation from the mean will be removed
-        PCLcloud::Ptr filtered_cloud(new PCLcloud);
+        sor.setInputCloud(input_cloud);
+        sor.setMeanK(50);
+        sor.setStddevMulThresh(1.0);
+
+        PCLCloud::Ptr filtered_cloud(new PCLCloud);
         sor.filter(*filtered_cloud);
 
         RCLCPP_INFO(this->get_logger(), "Applied Statistical Outlier Removal");
+        return filtered_cloud;
+    }
 
-        // 2. Plane Segmentation (removing large planar surfaces)
-        pcl::SACSegmentation<PointT> seg;
-        pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-        pcl::ModelCoefficients::Ptr coefficients(new pcl::ModelCoefficients);
-        PCLcloud::Ptr cloud_no_plane(new PCLcloud);
+    PCLCloud::Ptr applyVoxelGridFilter(const PCLCloud::Ptr& input_cloud)
+    {
+        pcl::VoxelGrid<PointT> voxel_grid;
+        voxel_grid.setInputCloud(input_cloud);
+        voxel_grid.setLeafSize(0.005f, 0.005f, 0.005f);
 
-        seg.setOptimizeCoefficients(true);
-        seg.setModelType(pcl::SACMODEL_PLANE);
-        seg.setMethodType(pcl::SAC_RANSAC);
-        seg.setMaxIterations(1000);
-        seg.setDistanceThreshold(0.01); // Max distance to the model plane
+        PCLCloud::Ptr voxel_filtered_cloud(new PCLCloud);
+        voxel_grid.filter(*voxel_filtered_cloud);
 
-        // Segment the largest planar component from the cloud
-        seg.setInputCloud(filtered_cloud);
-        seg.segment(*inliers, *coefficients);
+        RCLCPP_INFO(this->get_logger(), "Applied Voxel Grid Downsampling");
+        return voxel_filtered_cloud;
+    }
 
-        if (inliers->indices.size() == 0)
-        {
-            RCLCPP_WARN(this->get_logger(), "No planar surface found in the combined point cloud.");
-        }
-        else
-        {
-            // Extract the inliers (i.e., remove the plane)
-            pcl::ExtractIndices<PointT> extract;
-            extract.setInputCloud(filtered_cloud);
-            extract.setIndices(inliers);
-            extract.setNegative(true); // True to extract everything except the plane
-            extract.filter(*cloud_no_plane);
+    PCLCloud::Ptr applyMovingLeastSquares(const PCLCloud::Ptr& input_cloud)
+    {
+        pcl::MovingLeastSquares<PointT, PointT> mls;
+        mls.setInputCloud(input_cloud);
+        mls.setSearchRadius(0.02);
+        mls.setPolynomialOrder(2);
+        mls.setUpsamplingMethod(pcl::MovingLeastSquares<PointT, PointT>::NONE);
 
-            RCLCPP_INFO(this->get_logger(), "Plane segmentation complete. Extracted %ld points.", cloud_no_plane->points.size());
-        }
+        PCLCloud::Ptr smoothed_cloud(new PCLCloud);
+        mls.process(*smoothed_cloud);
 
-        // 3. Octree Downsampling with Color Preservation
-        pcl::octree::OctreePointCloudPointVector<PointT> octree(0.01f); // 1 cm resolution
-        octree.setInputCloud(cloud_no_plane);
-        octree.addPointsFromInputCloud();
+        RCLCPP_INFO(this->get_logger(), "Applied Moving Least Squares Smoothing");
+        return smoothed_cloud;
+    }
 
-        PCLcloud::Ptr octree_filtered_cloud(new PCLcloud);
+    PCLCloud::Ptr applyRadiusOutlierRemoval(const PCLCloud::Ptr& input_cloud)
+    {
+        pcl::RadiusOutlierRemoval<PointT> ror;
+        ror.setInputCloud(input_cloud);
+        ror.setRadiusSearch(0.02);
+        ror.setMinNeighborsInRadius(5);
 
-        // Iterate through all leaf nodes in the octree
-        for (auto it = octree.begin(); it != octree.end(); ++it)
-        {
-            // Get all points in the current leaf node
-            const std::vector<int> &indices = it.getLeafContainer().getPointIndicesVector();
+        PCLCloud::Ptr cleaned_cloud(new PCLCloud);
+        ror.filter(*cleaned_cloud);
 
-            Eigen::Vector3f color_avg(0.0, 0.0, 0.0);
-            Eigen::Vector3f point_avg(0.0, 0.0, 0.0);
+        RCLCPP_INFO(this->get_logger(), "Applied Radius Outlier Removal");
+        return cleaned_cloud;
+    }
 
-            for (int idx : indices)
-            {
-                const PointT &point = (*cloud_no_plane)[idx];
-                point_avg += point.getVector3fMap();
-                color_avg += Eigen::Vector3f(point.r, point.g, point.b);
-            }
+    void savePointCloud(const PCLCloud::Ptr& cloud, const std::string& filename)
+    {
+        cloud->width = cloud->points.size();
+        cloud->height = 1;
+        cloud->is_dense = true;
 
-            point_avg /= indices.size();
-            color_avg /= indices.size();
+        pcl::io::savePCDFileASCII(filename, *cloud);
+        RCLCPP_INFO(this->get_logger(), "Saved combined point cloud to %s", filename.c_str());
+    }
 
-            PointT avg_point;
-            avg_point.x = point_avg.x();
-            avg_point.y = point_avg.y();
-            avg_point.z = point_avg.z();
-            avg_point.r = static_cast<uint8_t>(color_avg.x());
-            avg_point.g = static_cast<uint8_t>(color_avg.y());
-            avg_point.b = static_cast<uint8_t>(color_avg.z());
-
-            octree_filtered_cloud->points.push_back(avg_point);
-        }
-
-        RCLCPP_INFO(this->get_logger(), "Applied Octree downsampling with color preservation");
-
-        // 4. Set width and height before saving the final cloud
-        octree_filtered_cloud->width = octree_filtered_cloud->points.size();
-        octree_filtered_cloud->height = 1; // Unorganized point cloud
-        octree_filtered_cloud->is_dense = true;
-
-        // Save the combined and processed point cloud
-        pcl::io::savePCDFileASCII("combined_cloud.pcd", *octree_filtered_cloud);
-        RCLCPP_INFO(this->get_logger(), "Saved combined point cloud to combined_cloud.pcd");
-
-        // Delete the individual cloud files after combining
-        for (const auto &file : filenames)
+    void deletePointCloudFiles(const std::vector<std::string>& filenames)
+    {
+        for (const auto& file : filenames)
         {
             if (std::filesystem::remove(file))
             {
@@ -163,11 +151,10 @@ private:
     }
 };
 
-int main(int argc, char *argv[])
+int main(int argc, char* argv[])
 {
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<PointCloudCombiner>();
-    rclcpp::spin(node);
+    rclcpp::spin(std::make_shared<PointCloudCombiner>());
     rclcpp::shutdown();
     return 0;
 }

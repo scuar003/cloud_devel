@@ -16,7 +16,7 @@ class PointCloudSaver : public rclcpp::Node {
     public:
         PointCloudSaver() : Node("pointcloud_saver_node"), cloud_count_(0), tf_buffer(this->get_clock()), tf_listener(tf_buffer) {
             sub_pointcloud_ = this->create_subscription<sensor_msgs::msg::PointCloud2>(
-                "/camera/depth/color/points", 10, 
+                "/camera/camera/depth/color/points", 10, 
                 std::bind(&PointCloudSaver::cloudCallback, this, std::placeholders::_1));
         }
 
