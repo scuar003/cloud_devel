@@ -19,6 +19,7 @@ find_package(cv_bridge REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(Curses REQUIRED)
+find_package(tf2_eigen REQUIRED)
 
 include_directories(
   include
@@ -44,6 +45,14 @@ add_executable(SaveCloud src/toMesh/cloudSaver.cpp)
 add_executable(CombineCloud src/toMesh/cloudCombine.cpp)
 add_executable(MeshCloud src/toMesh/cloudMesh.cpp)
 add_executable(improveCloud src/toMesh/improveCloud.cpp)
+
+# Add curvature executables
+add_executable(curvature_viz src/curvature/curvature_pub.cpp)
+add_executable(mesh_gen src/curvature/mesh_gen.cpp)
+
+# RPLIDAR EXECUTABLES
+add_executable(laser_to_cloud src/rpLidar/laserToCloud.cpp)
+
 
 # Link libraries for maps executables
 ament_target_dependencies(map rclcpp sensor_msgs pcl_conversions tf2 tf2_ros tf2_geometry_msgs cv_bridge OpenCV)
@@ -75,6 +84,18 @@ target_link_libraries(MeshCloud ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::Eig
 ament_target_dependencies(improveCloud rclcpp sensor_msgs visualization_msgs pcl_conversions tf2 tf2_ros tf2_geometry_msgs cv_bridge OpenCV)
 target_link_libraries(improveCloud pcl_common pcl_io pcl_filters pcl_kdtree pcl_search pcl_features pcl_segmentation ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::Eigen ${OpenCV_LIBS})
 
+
+#Curvature for anthony
+ament_target_dependencies(curvature_viz rclcpp sensor_msgs visualization_msgs pcl_conversions tf2 tf2_ros tf2_geometry_msgs cv_bridge OpenCV)
+target_link_libraries(curvature_viz ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::Eigen)
+
+ament_target_dependencies(mesh_gen rclcpp sensor_msgs visualization_msgs pcl_conversions tf2 tf2_ros tf2_geometry_msgs cv_bridge OpenCV)
+target_link_libraries(mesh_gen ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::Eigen)
+
+#rpildar 
+ament_target_dependencies(laser_to_cloud rclcpp sensor_msgs  pcl_conversions tf2 tf2_ros tf2_geometry_msgs tf2_eigen)
+target_link_libraries(laser_to_cloud ${PCL_LIBRARIES} ${CURSES_LIBRARIES} Eigen3::Eigen)
+
 # Install targets
 install(TARGETS
   map
@@ -86,6 +107,9 @@ install(TARGETS
   CombineCloud
   MeshCloud 
   improveCloud
+  curvature_viz
+  mesh_gen
+  laser_to_cloud
   DESTINATION lib/${PROJECT_NAME})
 
 ament_package()

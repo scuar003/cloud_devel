@@ -1,6 +1,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <pcl/point_cloud.h>
+#include <pcl/conversions.h>
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/io/ply_io.h>
 #include <pcl/common/transforms.h>
@@ -25,7 +26,8 @@ class PCLConverter : public rclcpp::Node
 public:
     PCLConverter() : Node("pcl_converter_node"), tf_buffer(this->get_clock()), tf_listener(tf_buffer)
     {
-        sub_pointcloud = create_subscription<PointCloud2>("/camera/camera/depth/color/points", 10, std::bind(&PCLConverter::cloudProcessing, this, _1));
+        sub_pointcloud = create_subscription<PointCloud2>("/point_cloud", 10, std::bind(&PCLConverter::cloudProcessing, this, _1));
+        //sub_pointcloud = create_subscription<PointCloud2>("/camera/depth/color/points", 10, std::bind(&PCLConverter::cloudProcessing, this, _1));
         pub_process_cloud = create_publisher<PointCloud2>("processed_points", 10);
         accumulated_cloud.reset(new PCLcloud);
     }
@@ -108,7 +110,7 @@ private:
 
         extract.setInputCloud(output_cloud);
         extract.setIndices(inliers);
-        extract.setNegative(true); // remove the plane
+        extract.setNegative(false); // remove the plane
         extract.filter(*output_cloud);
     }
 
